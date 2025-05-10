@@ -30,7 +30,7 @@ interface PlaceDetailsProps {
 
 export default function PlaceDetails({ place, onClose, isModal = false, userLocation = null }: PlaceDetailsProps) {
   const { toast } = useToast();
-  const { speak, isSpeaking, stop } = useVoiceGuide();
+  const { speak, isSpeaking, isPaused, stop, error: voiceError } = useVoiceGuide();
   const [currentLanguage, setCurrentLanguage] = useState("English");
   const [translatedDescription, setTranslatedDescription] = useState<string>(place.description);
   const [isTranslating, setIsTranslating] = useState<boolean>(false);
@@ -66,7 +66,7 @@ export default function PlaceDetails({ place, onClose, isModal = false, userLoca
   }, [place.description, currentLanguage, toast]);
   
   // Check if user is logged in
-  const { data: userData } = useQuery({
+  const { data: userData } = useQuery<{user: {id: number, username: string}}>({
     queryKey: ["/api/auth/me"],
     retry: false,
   });
@@ -74,8 +74,8 @@ export default function PlaceDetails({ place, onClose, isModal = false, userLoca
   const isLoggedIn = !!userData?.user;
   
   // Check if place is in user's favorites
-  const { data: favoriteData } = useQuery({
-    queryKey: isLoggedIn ? [`/api/favorites/${place.id}`] : null,
+  const { data: favoriteData } = useQuery<{isFavorite: boolean}>({
+    queryKey: isLoggedIn ? [`/api/favorites/${place.id}`] : [],
     enabled: isLoggedIn,
   });
   
@@ -142,12 +142,37 @@ export default function PlaceDetails({ place, onClose, isModal = false, userLoca
     }
   };
 
+  // Display voice errors as toasts
+  useEffect(() => {
+    if (voiceError) {
+      toast({
+        title: "Voice Guide Error",
+        description: voiceError,
+        variant: "destructive",
+      });
+    }
+  }, [voiceError, toast]);
+
   const handleVoiceGuide = () => {
     if (isSpeaking) {
       stop();
+      toast({
+        title: "Voice Guide Stopped",
+        duration: 1500,
+      });
     } else {
+      if (isTranslating) {
+        toast({
+          title: "Please Wait",
+          description: "Translation in progress. Voice guide will start once translation is complete.",
+          duration: 3000,
+        });
+        return;
+      }
+      
       // Use the translated description for voice narration
       speak(translatedDescription, currentLanguage);
+      
       toast({
         title: "Voice Guide Active",
         description: `Now playing in ${currentLanguage}`,
@@ -325,10 +350,26 @@ export default function PlaceDetails({ place, onClose, isModal = false, userLoca
         
         <button 
           onClick={handleVoiceGuide}
-          className="flex items-center space-x-1 text-sm text-primary"
+          disabled={isTranslating}
+          className={`flex items-center space-x-1 text-sm ${isSpeaking ? 'text-primary-600' : 'text-primary'} ${isTranslating ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          <i className={`fas ${isSpeaking ? 'fa-pause' : 'fa-volume-up'}`}></i>
-          <span>{isSpeaking ? 'Pause' : 'Voice Guide'}</span>
+          {isSpeaking ? (
+            <>
+              <i className="fas fa-pause"></i>
+              <span>Stop</span>
+            </>
+          ) : isPaused ? (
+            <>
+              <i className="fas fa-play"></i>
+              <span>Resume</span>
+            </>
+          ) : (
+            <>
+              <i className="fas fa-volume-up"></i>
+              <span>Voice Guide</span>
+              {isTranslating && <span className="text-xs ml-1">(wait...)</span>}
+            </>
+          )}
         </button>
         
         {isModal ? (
