@@ -26,12 +26,15 @@ export default function FilterSidebar() {
     queryKey: ["/api/categories"],
   });
 
+  // Get the search string for dependency tracking
+  const search = useSearch();
+  
   // Update selected filters when URL changes
   useEffect(() => {
-    const params = new URLSearchParams(useSearch());
+    const params = new URLSearchParams(search);
     setSelectedCity(params.get("city"));
     setSelectedCategory(params.get("category"));
-  }, [useSearch()]);
+  }, [search]);
 
   const handleCityChange = (cityId: string) => {
     const params = new URLSearchParams(searchParams);

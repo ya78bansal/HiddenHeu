@@ -8,8 +8,20 @@ import {
   VolumeX, 
   ChevronDown, 
   Menu, 
-  Globe 
+  Globe,
+  User,
+  LogOut,
+  Settings,
+  Heart
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface HeaderProps {
   toggleMobileMenu: () => void;
@@ -102,16 +114,40 @@ export default function Header({ toggleMobileMenu }: HeaderProps) {
             <div className="hidden md:block w-16 h-8 bg-gray-200 animate-pulse rounded"></div>
           ) : isLoggedIn && userData && userData.user ? (
             <div className="hidden md:flex items-center space-x-3">
-              <span className="text-sm">{userData.user.username}</span>
-              <button 
-                onClick={async () => {
-                  await apiRequest("POST", "/api/auth/logout", {});
-                  window.location.href = "/";
-                }}
-                className="text-gray-600 hover:text-blue-500 transition-colors"
-              >
-                Logout
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center space-x-2 text-sm text-gray-700 hover:text-blue-500 transition-colors">
+                    <span>{userData.user.username}</span>
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem>
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Profile</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Heart className="mr-2 h-4 w-4" />
+                    <span>Favorites</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Settings</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={async () => {
+                      await apiRequest("POST", "/api/auth/logout", {});
+                      window.location.href = "/";
+                    }}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Log out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           ) : (
             <>
