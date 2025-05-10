@@ -391,6 +391,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Server error" });
     }
   });
+  
+  // ------------- Translation API -------------
+  
+  // Translate text to target language
+  app.post("/api/translate", async (req: Request, res: Response) => {
+    try {
+      const { text, targetLanguage } = req.body;
+      
+      if (!text) {
+        return res.status(400).json({ message: "Text is required" });
+      }
+      
+      if (!targetLanguage) {
+        return res.status(400).json({ message: "Target language is required" });
+      }
+      
+      // Don't translate if text is empty or already in English and target is English
+      if (targetLanguage === "English") {
+        return res.json({ translatedText: text });
+      }
+      
+      // Get language code
+      const langCode = languageCodes[targetLanguage] || "en";
+      
+      // Call OpenAI API to translate the text
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024
+        messages: [
+          {
+            role: "system",
+            content: `You are a professional translator. Translate the following text to ${targetLanguage} (${langCode}). Preserve the original meaning, tone, and style. Only respond with the translated text, nothing else.`
+          },
+          {
+            role: "user",
+            content: text
+          }
+        ],
+        max_tokens: 1000,
+      });
+      
+      const translatedText = response.choices[0].message.content;
+      
+      res.json({ translatedText: translatedText || text });
+    } catch (err) {
+      console.error("Translation API error:", err);
+      
+      if (err instanceof Error) {
+        if (err.message.includes('API key')) {
+          return res.status(500).json({ message: "Translation failed: API key issue detected." });
+        } else if (err.message.includes('network') || err.message.includes('timeout')) {
+          return res.status(500).json({ message: "Translation failed: Network issue detected." });
+        }
+      }
+      
+      res.status(500).json({ message: "Translation failed. Please try again later." });
+    }
+  });
 
   return httpServer;
 }

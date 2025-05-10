@@ -1,8 +1,7 @@
-import OpenAI from "openai";
+import { apiRequest } from "./queryClient";
 
-// Initialize OpenAI client with API key from environment variables
-const openai = new OpenAI(); 
-// Note: The OpenAI client will automatically use the OPENAI_API_KEY environment variable
+// We'll use our server-side API endpoint for translations instead of calling OpenAI directly
+// This keeps the API key secure on the server
 
 // Language codes for translation
 export const languageCodes: Record<string, string> = {
@@ -15,51 +14,43 @@ export const languageCodes: Record<string, string> = {
 };
 
 /**
- * Translates text to the specified target language using OpenAI
+ * Translates text to the specified target language using our server API
  */
 export async function translateText(text: string, targetLanguage: string): Promise<string> {
   try {
-    // Check if we have a valid language code
-    const langCode = languageCodes[targetLanguage] || "en";
-    
-    // Don't translate if text is empty or already in English and target is English
-    if (!text || (targetLanguage === "English" && !text.match(/[^\x00-\x7F]/g))) {
+    // Don't translate if text is empty or target is English
+    if (!text || targetLanguage === "English") {
       return text;
     }
     
-    // Call OpenAI API to translate the text
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024
-      messages: [
-        {
-          role: "system",
-          content: `You are a professional translator. Translate the following text to ${targetLanguage} (${langCode}). Preserve the original meaning, tone, and style. Only respond with the translated text, nothing else.`
-        },
-        {
-          role: "user",
-          content: text
-        }
-      ],
-      max_tokens: 1000,
+    // Call our server API endpoint to translate the text
+    const response = await apiRequest<{ translatedText: string }>("/api/translate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text,
+        targetLanguage,
+      }),
     });
     
-    const translatedText = response.choices[0].message.content;
-    return translatedText || text;
+    // Return the translated text or original if translation failed
+    return response.translatedText || text;
   } catch (error) {
     console.error("Translation error:", error);
     
-    // Provide more detailed error messages based on error type
+    // Provide detailed error messages based on error type
     if (error instanceof Error) {
-      // Check for common API key and network issues
-      if (error.message.includes('API key')) {
-        console.error('API key error during translation. Please check your OPENAI_API_KEY.');
+      const errorMessage = error.message || "Unknown error";
+      console.error('Translation API error:', errorMessage);
+      
+      // Check for common error messages
+      if (errorMessage.includes('API key')) {
         throw new Error('Translation failed: API key issue detected. Please try again later.');
-      } else if (error.message.includes('network') || error.message.includes('timeout')) {
-        console.error('Network error during translation:', error.message);
+      } else if (errorMessage.includes('network') || errorMessage.includes('timeout')) {
         throw new Error('Translation failed: Network issue detected. Please check your connection.');
       } else {
-        // Generic error handling
-        console.error('OpenAI API error:', error.message);
         throw new Error('Translation failed. Please try again later.');
       }
     }
