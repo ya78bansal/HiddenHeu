@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, useSearch } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
-import { fetchPlaceDetails, createMapMarker } from '@/lib/mapUtils';
+import { fetchPlaceDetails, createMapMarker, getDirectionsUrl, calculateDistance } from '@/lib/mapUtils';
+import { useGeolocation } from '@/hooks/useGeolocation';
+import { useToast } from '@/hooks/use-toast';
 import PlaceDetails from './PlaceDetails';
 
 interface MapViewProps {
@@ -13,6 +15,15 @@ export default function MapView({ className = '' }: MapViewProps) {
   const searchParams = new URLSearchParams(useSearch());
   const cityId = searchParams.get("city");
   const categoryId = searchParams.get("category");
+  const { toast } = useToast();
+  
+  // Get user's geolocation
+  const { 
+    location: userGeoLocation, 
+    error: locationError, 
+    loading: locationLoading,
+    requestLocation 
+  } = useGeolocation();
 
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
@@ -20,6 +31,8 @@ export default function MapView({ className = '' }: MapViewProps) {
   const [selectedPlace, setSelectedPlace] = useState<any | null>(null);
   const [mapCenter, setMapCenter] = useState({ lat: 20.5937, lng: 78.9629 }); // Center of India by default
   const [mapZoom, setMapZoom] = useState(5);
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [showDirections, setShowDirections] = useState(false);
 
   // Fetch places based on filters
   const { data: placesData, isLoading } = useQuery({
@@ -40,6 +53,16 @@ export default function MapView({ className = '' }: MapViewProps) {
     queryKey: cityId ? [`/api/cities/${cityId}`] : null,
     enabled: !!cityId,
   });
+
+  // Get user location when available
+  useEffect(() => {
+    if (userGeoLocation) {
+      setUserLocation({
+        lat: parseFloat(userGeoLocation.latitude),
+        lng: parseFloat(userGeoLocation.longitude)
+      });
+    }
+  }, [userGeoLocation]);
 
   // Initialize the map
   useEffect(() => {
@@ -63,6 +86,31 @@ export default function MapView({ className = '' }: MapViewProps) {
     
     mapInstanceRef.current = map;
 
+    // Add user location marker if available
+    if (userLocation) {
+      new google.maps.Marker({
+        position: userLocation,
+        map,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 10,
+          fillColor: '#4285F4',
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 2,
+        },
+        title: 'Your Location',
+      });
+      
+      // If no city is selected, center map on user location
+      if (!cityId) {
+        setMapCenter(userLocation);
+        setMapZoom(13);
+        map.setCenter(userLocation);
+        map.setZoom(13);
+      }
+    }
+
     // Update map center and zoom if city is selected
     if (cityData?.city) {
       const cityLocation = {
@@ -81,7 +129,7 @@ export default function MapView({ className = '' }: MapViewProps) {
       markersRef.current.forEach(marker => marker.setMap(null));
       markersRef.current = [];
     };
-  }, [mapRef.current, cityData]);
+  }, [mapRef.current, cityData, userLocation]);
 
   // Add place markers to the map
   useEffect(() => {

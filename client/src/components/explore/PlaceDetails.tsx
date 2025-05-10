@@ -4,6 +4,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useVoiceGuide } from "@/hooks/useVoiceGuide";
+import { useGeolocation } from "@/hooks/useGeolocation";
+import { calculateDistance, getDirectionsUrl } from "@/lib/mapUtils";
 
 interface PlaceDetailsProps {
   place: {
@@ -17,9 +19,12 @@ interface PlaceDetailsProps {
     rating: number;
     reviewCount: number;
     tags: string[];
+    latitude?: string;
+    longitude?: string;
   };
   onClose?: () => void;
   isModal?: boolean;
+  userLocation?: { lat: number, lng: number } | null;
 }
 
 export default function PlaceDetails({ place, onClose, isModal = false }: PlaceDetailsProps) {

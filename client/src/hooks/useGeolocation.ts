@@ -115,11 +115,27 @@ export function useGeolocation(): GeolocationHook {
     );
   }, []);
 
-  // Request location when component mounts (optional)
+  // Add a state to track if permission has been requested
+  const [permissionRequested, setPermissionRequested] = useState(false);
+
+  // Show permission dialog when component mounts if not already requested
   useEffect(() => {
-    // Uncomment to automatically request location when component mounts
-    // requestLocation();
-  }, []);
+    // Only prompt for location the first time
+    if (!permissionRequested && !location) {
+      setPermissionRequested(true);
+      
+      // Check if we already have permission
+      if (navigator.permissions) {
+        navigator.permissions.query({ name: 'geolocation' }).then(result => {
+          if (result.state === 'granted') {
+            requestLocation();
+          }
+        }).catch(err => {
+          console.error("Permission API error:", err);
+        });
+      }
+    }
+  }, [permissionRequested, location, requestLocation]);
 
   return { location, error, loading, requestLocation };
 }
