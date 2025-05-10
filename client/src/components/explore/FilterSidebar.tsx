@@ -17,12 +17,12 @@ export default function FilterSidebar() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(searchParams.get("category"));
   
   // Fetch cities data
-  const { data: citiesData, isLoading: isLoadingCities } = useQuery({
+  const { data: citiesData, isLoading: isLoadingCities } = useQuery<{cities: any[]}>({
     queryKey: ["/api/cities"],
   });
 
   // Fetch categories data
-  const { data: categoriesData, isLoading: isLoadingCategories } = useQuery({
+  const { data: categoriesData, isLoading: isLoadingCategories } = useQuery<{categories: any[]}>({
     queryKey: ["/api/categories"],
   });
 

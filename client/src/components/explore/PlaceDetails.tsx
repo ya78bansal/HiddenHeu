@@ -1,11 +1,12 @@
 import { Link } from "wouter";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useVoiceGuide } from "@/hooks/useVoiceGuide";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { calculateDistance, getDirectionsUrl } from "@/lib/mapUtils";
+import { getTranslation } from "@/lib/translationUtils";
 
 interface PlaceDetailsProps {
   place: {
@@ -27,10 +28,42 @@ interface PlaceDetailsProps {
   userLocation?: { lat: number, lng: number } | null;
 }
 
-export default function PlaceDetails({ place, onClose, isModal = false }: PlaceDetailsProps) {
+export default function PlaceDetails({ place, onClose, isModal = false, userLocation = null }: PlaceDetailsProps) {
   const { toast } = useToast();
   const { speak, isSpeaking, stop } = useVoiceGuide();
   const [currentLanguage, setCurrentLanguage] = useState("English");
+  const [translatedDescription, setTranslatedDescription] = useState<string>(place.description);
+  const [isTranslating, setIsTranslating] = useState<boolean>(false);
+  
+  // Also get user's location from hook if not provided as prop
+  const { location: geoLocation } = useGeolocation();
+  
+  // Translate description when language changes
+  useEffect(() => {
+    const translateDescription = async () => {
+      if (currentLanguage === "English") {
+        setTranslatedDescription(place.description);
+        return;
+      }
+      
+      setIsTranslating(true);
+      try {
+        const translated = await getTranslation(place.description, currentLanguage);
+        setTranslatedDescription(translated);
+      } catch (error) {
+        console.error("Translation error:", error);
+        toast({
+          title: "Translation Failed",
+          description: "Could not translate the description. Using original text.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsTranslating(false);
+      }
+    };
+    
+    translateDescription();
+  }, [place.description, currentLanguage, toast]);
   
   // Check if user is logged in
   const { data: userData } = useQuery({
@@ -113,7 +146,8 @@ export default function PlaceDetails({ place, onClose, isModal = false }: PlaceD
     if (isSpeaking) {
       stop();
     } else {
-      speak(place.description, currentLanguage);
+      // Use the translated description for voice narration
+      speak(translatedDescription, currentLanguage);
       toast({
         title: "Voice Guide Active",
         description: `Now playing in ${currentLanguage}`,
@@ -123,17 +157,66 @@ export default function PlaceDetails({ place, onClose, isModal = false }: PlaceD
   };
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setCurrentLanguage(e.target.value);
+    const newLanguage = e.target.value;
+    setCurrentLanguage(newLanguage);
+    
+    // Update voice guide if it's playing
     if (isSpeaking) {
       stop();
       setTimeout(() => {
-        speak(place.description, e.target.value);
+        // Use translated description with the voice guide
+        speak(translatedDescription, newLanguage);
       }, 300);
+    }
+    
+    // Toast to inform user about translation
+    if (newLanguage !== "English") {
+      toast({
+        title: `Translating to ${newLanguage}`,
+        description: isTranslating ? "Translation in progress..." : "Description has been translated",
+        duration: 3000,
+      });
     }
   };
 
+  // Calculate distance from user if location is available
+  const calculateDistanceFromUser = (): string | null => {
+    if (!place.latitude || !place.longitude) return null;
+    
+    // Use provided userLocation or get from geolocation hook
+    const userLat = userLocation?.lat || (geoLocation ? parseFloat(geoLocation.latitude) : null);
+    const userLng = userLocation?.lng || (geoLocation ? parseFloat(geoLocation.longitude) : null);
+    
+    if (userLat === null || userLng === null) return null;
+    
+    const distance = calculateDistance(
+      userLat,
+      userLng,
+      parseFloat(place.latitude),
+      parseFloat(place.longitude)
+    );
+    
+    // Format distance: if less than 1km, show in meters
+    return distance < 1 
+      ? `${Math.round(distance * 1000)}m` 
+      : `${distance.toFixed(1)}km`;
+  };
+
   const getDirections = () => {
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${place.latitude},${place.longitude}&destination_place_id=${place.name}`;
+    if (!place.latitude || !place.longitude) {
+      toast({
+        title: "Unable to get directions",
+        description: "Location coordinates are not available for this place.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const url = getDirectionsUrl(
+      parseFloat(place.latitude),
+      parseFloat(place.longitude),
+      place.name
+    );
     window.open(url, '_blank');
   };
 
@@ -165,6 +248,12 @@ export default function PlaceDetails({ place, onClose, isModal = false }: PlaceD
             <i className="fas fa-map-marker-alt text-sm text-red-500"></i>
             <span className="text-gray-500 text-sm ml-1">{place.address}</span>
           </div>
+          {calculateDistanceFromUser() && (
+            <div className="flex items-center mb-1">
+              <i className="fas fa-route text-sm text-blue-500"></i>
+              <span className="text-gray-500 text-sm ml-1">{calculateDistanceFromUser()} away</span>
+            </div>
+          )}
           <div className="flex items-center text-yellow-400 mb-1">
             {Array(Math.floor(place.rating / 10)).fill(0).map((_, i) => (
               <i key={i} className="fas fa-star text-xs"></i>
@@ -189,29 +278,20 @@ export default function PlaceDetails({ place, onClose, isModal = false }: PlaceD
         </div>
       </div>
       
-      <p className="text-sm text-gray-600 mb-3">{place.description}</p>
-      
-      <div className="flex justify-between">
-        <button 
-          onClick={getDirections}
-          className="flex items-center space-x-1 text-sm text-primary"
-        >
-          <i className="fas fa-directions"></i>
-          <span>Get Directions</span>
-        </button>
-        
-        <div className="flex items-center">
-          <button 
-            onClick={handleVoiceGuide}
-            className="flex items-center space-x-1 text-sm text-primary mr-3"
-          >
-            <i className={`fas ${isSpeaking ? 'fa-pause' : 'fa-volume-up'}`}></i>
-            <span>{isSpeaking ? 'Pause' : 'Voice Guide'}</span>
-          </button>
-          
-          {isSpeaking && (
+      <div className="mb-3">
+        {isTranslating ? (
+          <div className="flex items-center justify-center py-2 text-sm">
+            <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2"></div>
+            <span>Translating...</span>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-600">{translatedDescription}</p>
+        )}
+        <div className="flex justify-between items-center mt-1">
+          <div className="flex items-center">
+            <span className="text-xs text-gray-400">Language:</span>
             <select
-              className="text-xs border border-gray-200 rounded px-1 py-0.5 bg-transparent"
+              className="text-xs border border-gray-200 rounded px-1 py-0.5 bg-transparent ml-1"
               value={currentLanguage}
               onChange={handleLanguageChange}
             >
@@ -222,8 +302,34 @@ export default function PlaceDetails({ place, onClose, isModal = false }: PlaceD
               <option>Gujarati</option>
               <option>Marathi</option>
             </select>
+          </div>
+          {currentLanguage !== "English" && (
+            <button 
+              onClick={() => setCurrentLanguage("English")}
+              className="text-xs text-primary"
+            >
+              Show original
+            </button>
           )}
         </div>
+      </div>
+      
+      <div className="flex justify-between">
+        <button 
+          onClick={getDirections}
+          className="flex items-center space-x-1 text-sm text-primary"
+        >
+          <i className="fas fa-directions"></i>
+          <span>Get Directions</span>
+        </button>
+        
+        <button 
+          onClick={handleVoiceGuide}
+          className="flex items-center space-x-1 text-sm text-primary"
+        >
+          <i className={`fas ${isSpeaking ? 'fa-pause' : 'fa-volume-up'}`}></i>
+          <span>{isSpeaking ? 'Pause' : 'Voice Guide'}</span>
+        </button>
         
         {isModal ? (
           <button 

@@ -49,8 +49,8 @@ export default function MapView({ className = '' }: MapViewProps) {
   });
 
   // Fetch city data if cityId is provided
-  const { data: cityData } = useQuery({
-    queryKey: cityId ? [`/api/cities/${cityId}`] : null,
+  const { data: cityData } = useQuery<{city: {latitude: string, longitude: string}}>({
+    queryKey: cityId ? [`/api/cities/${cityId}`] : [],
     enabled: !!cityId,
   });
 
@@ -229,6 +229,7 @@ export default function MapView({ className = '' }: MapViewProps) {
           <PlaceDetails 
             place={selectedPlace} 
             onClose={() => setSelectedPlace(null)} 
+            userLocation={userLocation}
           />
         </div>
       )}
