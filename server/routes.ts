@@ -9,6 +9,22 @@ interface AuthRequest extends Request {
   user?: { id: number; username: string; email: string };
 }
 
+// Import OpenAI for server-side translation
+import OpenAI from "openai";
+
+// Create OpenAI client (uses OPENAI_API_KEY environment variable automatically)
+const openai = new OpenAI();
+
+// Language codes for translation
+const languageCodes: Record<string, string> = {
+  "English": "en",
+  "Hindi": "hi",
+  "Tamil": "ta", 
+  "Bengali": "bn",
+  "Gujarati": "gu",
+  "Marathi": "mr"
+};
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Create HTTP server
   const httpServer = createServer(app);

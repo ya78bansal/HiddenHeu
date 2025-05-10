@@ -1,7 +1,8 @@
 import OpenAI from "openai";
 
 // Initialize OpenAI client with API key from environment variables
-const openai = new OpenAI({ apiKey: import.meta.env.VITE_OPENAI_API_KEY });
+const openai = new OpenAI(); 
+// Note: The OpenAI client will automatically use the OPENAI_API_KEY environment variable
 
 // Language codes for translation
 export const languageCodes: Record<string, string> = {
@@ -46,7 +47,25 @@ export async function translateText(text: string, targetLanguage: string): Promi
     return translatedText || text;
   } catch (error) {
     console.error("Translation error:", error);
-    return text; // Return original text if translation fails
+    
+    // Provide more detailed error messages based on error type
+    if (error instanceof Error) {
+      // Check for common API key and network issues
+      if (error.message.includes('API key')) {
+        console.error('API key error during translation. Please check your OPENAI_API_KEY.');
+        throw new Error('Translation failed: API key issue detected. Please try again later.');
+      } else if (error.message.includes('network') || error.message.includes('timeout')) {
+        console.error('Network error during translation:', error.message);
+        throw new Error('Translation failed: Network issue detected. Please check your connection.');
+      } else {
+        // Generic error handling
+        console.error('OpenAI API error:', error.message);
+        throw new Error('Translation failed. Please try again later.');
+      }
+    }
+    
+    // For non-Error types, return original text
+    return text;
   }
 }
 
