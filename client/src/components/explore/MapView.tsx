@@ -5,6 +5,15 @@ import { fetchPlaceDetails, createMapMarker, getDirectionsUrl, calculateDistance
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useToast } from '@/hooks/use-toast';
 import PlaceDetails from './PlaceDetails';
+import LocationPermissionUI from './LocationPermissionUI';
+import { Map, AlertCircle } from 'lucide-react';
+
+// Fix for TypeScript with Google Maps
+declare global {
+  interface Window {
+    google: any;
+  }
+}
 
 interface MapViewProps {
   className?: string;

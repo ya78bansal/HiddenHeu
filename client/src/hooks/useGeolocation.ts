@@ -12,6 +12,7 @@ interface GeolocationHook {
   location: Location | null;
   error: string | null;
   loading: boolean;
+  permissionStatus: 'prompt' | 'granted' | 'denied' | 'unknown';
   requestLocation: () => void;
 }
 
@@ -22,36 +23,34 @@ export function useGeolocation(): GeolocationHook {
 
   const fetchLocationDetails = async (lat: number, lng: number): Promise<Location> => {
     try {
-      // Use Google Maps Geocoding API to get location details
-      // In a real app, you would provide an API key in the environment
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&result_type=locality|administrative_area_level_1|country&key=AIzaSyC2EcC8GBWAyFmw5RY8A1n1nNhDJeUoUJI`
-      );
+      // For now, we'll use a simpler approach just focusing on the coordinates
+      // Later, we can integrate a proper geocoding service with the correct API key
       
-      const data = await response.json();
-      
-      if (data.status === 'OK' && data.results.length > 0) {
-        const addressComponents = data.results[0].address_components;
-        
-        let city, state, country;
-        
-        for (const component of addressComponents) {
-          if (component.types.includes('locality')) {
-            city = component.long_name;
-          } else if (component.types.includes('administrative_area_level_1')) {
-            state = component.long_name;
-          } else if (component.types.includes('country')) {
-            country = component.long_name;
+      // Attempt basic reverse geocoding using a free service that doesn't require API key
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`,
+          {
+            headers: {
+              'User-Agent': 'HiddenHeu Travel Guide Application'
+            }
           }
-        }
+        );
         
-        return {
-          latitude: lat.toString(),
-          longitude: lng.toString(),
-          city,
-          state,
-          country,
-        };
+        if (response.ok) {
+          const data = await response.json();
+          
+          return {
+            latitude: lat.toString(),
+            longitude: lng.toString(),
+            city: data?.address?.city || data?.address?.town || data?.address?.village,
+            state: data?.address?.state,
+            country: data?.address?.country,
+          };
+        }
+      } catch (geocodeError) {
+        console.error('Geocoding error:', geocodeError);
+        // Fail silently and continue with just coordinates
       }
       
       // If geocoding fails, just return coordinates
@@ -115,27 +114,51 @@ export function useGeolocation(): GeolocationHook {
     );
   }, []);
 
-  // Add a state to track if permission has been requested
+  // Add states to track permission status
+  const [permissionStatus, setPermissionStatus] = useState<'prompt'|'granted'|'denied'|'unknown'>('unknown');
   const [permissionRequested, setPermissionRequested] = useState(false);
 
-  // Show permission dialog when component mounts if not already requested
+  // Check permission status when component mounts
   useEffect(() => {
-    // Only prompt for location the first time
-    if (!permissionRequested && !location) {
-      setPermissionRequested(true);
-      
-      // Check if we already have permission
-      if (navigator.permissions) {
-        navigator.permissions.query({ name: 'geolocation' }).then(result => {
-          if (result.state === 'granted') {
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser');
+      return;
+    }
+
+    const checkPermissions = async () => {
+      try {
+        if (navigator.permissions) {
+          const result = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
+          
+          setPermissionStatus(result.state as 'prompt'|'granted'|'denied');
+          
+          // If permission is already granted, request location automatically
+          if (result.state === 'granted' && !location) {
             requestLocation();
           }
-        }).catch(err => {
-          console.error("Permission API error:", err);
-        });
+          
+          // Listen for permission changes
+          result.addEventListener('change', () => {
+            setPermissionStatus(result.state as 'prompt'|'granted'|'denied');
+            if (result.state === 'granted' && !location) {
+              requestLocation();
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Permission API error:", err);
+        setPermissionStatus('unknown');
       }
-    }
-  }, [permissionRequested, location, requestLocation]);
+    };
+    
+    checkPermissions();
+  }, [location, requestLocation]);
 
-  return { location, error, loading, requestLocation };
+  return { 
+    location, 
+    error, 
+    loading, 
+    permissionStatus,
+    requestLocation 
+  };
 }
