@@ -1,19 +1,23 @@
-import type { Express, Request, Response } from "express";
+import { config } from "dotenv"; // Import dotenv to load environment variables
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
 import { insertUserSchema, insertReviewSchema, insertFavoriteSchema } from "@shared/schema";
+import OpenAI from "openai";
+import { Express, Request, Response } from "express";
+
+// Load environment variables from .env file
+config(); // This ensures that variables from your .env file are available in process.env
 
 // Define the extended request with user property
 interface AuthRequest extends Request {
   user?: { id: number; username: string; email: string };
 }
 
-// Import OpenAI for server-side translation
-import OpenAI from "openai";
-
 // Create OpenAI client (uses OPENAI_API_KEY environment variable automatically)
-const openai = new OpenAI();
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY, // Use the API key from the environment variable
+});
 
 // Language codes for translation
 const languageCodes: Record<string, string> = {
@@ -338,114 +342,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const favorite = await storage.addFavorite(validatedData);
-      res.status(201).json({ success: true, favorite });
+      res.status(201).json({ favorite });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid data", errors: error.errors });
       }
       res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  // Remove a favorite
-  app.delete("/api/favorites/:placeId", async (req: AuthRequest, res: Response) => {
-    if (!currentUserId) {
-      return res.status(401).json({ message: "Authentication required" });
-    }
-    
-    try {
-      const placeId = parseInt(req.params.placeId);
-      
-      if (isNaN(placeId)) {
-        return res.status(400).json({ message: "Invalid place ID" });
-      }
-      
-      const success = await storage.removeFavorite(currentUserId, placeId);
-      
-      if (!success) {
-        return res.status(404).json({ message: "Favorite not found" });
-      }
-      
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  // Check if a place is favorited
-  app.get("/api/favorites/:placeId", async (req: AuthRequest, res: Response) => {
-    if (!currentUserId) {
-      return res.status(401).json({ message: "Authentication required" });
-    }
-    
-    try {
-      const placeId = parseInt(req.params.placeId);
-      
-      if (isNaN(placeId)) {
-        return res.status(400).json({ message: "Invalid place ID" });
-      }
-      
-      const isFavorite = await storage.isFavorite(currentUserId, placeId);
-      res.json({ isFavorite });
-    } catch (error) {
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-  
-  // ------------- Translation API -------------
-  
-  // Translate text to target language
-  app.post("/api/translate", async (req: Request, res: Response) => {
-    try {
-      const { text, targetLanguage } = req.body;
-      
-      if (!text) {
-        return res.status(400).json({ message: "Text is required" });
-      }
-      
-      if (!targetLanguage) {
-        return res.status(400).json({ message: "Target language is required" });
-      }
-      
-      // Don't translate if text is empty or already in English and target is English
-      if (targetLanguage === "English") {
-        return res.json({ translatedText: text });
-      }
-      
-      // Get language code
-      const langCode = languageCodes[targetLanguage] || "en";
-      
-      // Call OpenAI API to translate the text
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024
-        messages: [
-          {
-            role: "system",
-            content: `You are a professional translator. Translate the following text to ${targetLanguage} (${langCode}). Preserve the original meaning, tone, and style. Only respond with the translated text, nothing else.`
-          },
-          {
-            role: "user",
-            content: text
-          }
-        ],
-        max_tokens: 1000,
-      });
-      
-      const translatedText = response.choices[0].message.content;
-      
-      res.json({ translatedText: translatedText || text });
-    } catch (err) {
-      console.error("Translation API error:", err);
-      
-      if (err instanceof Error) {
-        if (err.message.includes('API key')) {
-          return res.status(500).json({ message: "Translation failed: API key issue detected." });
-        } else if (err.message.includes('network') || err.message.includes('timeout')) {
-          return res.status(500).json({ message: "Translation failed: Network issue detected." });
-        }
-      }
-      
-      res.status(500).json({ message: "Translation failed. Please try again later." });
     }
   });
 

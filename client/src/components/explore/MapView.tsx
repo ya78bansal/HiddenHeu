@@ -31,6 +31,7 @@ export default function MapView({ className = '' }: MapViewProps) {
     location: userGeoLocation, 
     error: locationError, 
     loading: locationLoading,
+    permissionStatus,
     requestLocation 
   } = useGeolocation();
 
